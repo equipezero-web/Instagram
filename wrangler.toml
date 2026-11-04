@@ -7,3 +7,8 @@ binding = "DB"
 database_name = "instagram-sales-hub-db"
 database_id = "29a7cb3b-efe7-4a41-aecb-6d573f460aad"
 migrations_dir = "migrations"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/health", "/api/*", "/webhooks/*"]
