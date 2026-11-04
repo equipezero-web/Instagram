@@ -1,0 +1,9 @@
+{
+  "name": "NEXORA Personal Sales Hub",
+  "short_name": "NEXORA",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0b0b17",
+  "theme_color": "#111024",
+  "description": "Painel pessoal de vendas digitais"
+}
