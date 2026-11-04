@@ -1,9 +1,9 @@
 name = "instagram-sales-hub"
 main = "src/worker.js"
 compatibility_date = "2026-11-01"
-# After creating D1, replace database_id with its actual ID.
+
 [[d1_databases]]
 binding = "DB"
-database_name = "instagram-sales-hub"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_name = "instagram-sales-hub-db"
+database_id = "29a7cb3b-efe7-4a41-aecb-6d573f460aad"
 migrations_dir = "migrations"
