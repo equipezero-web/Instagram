@@ -55,6 +55,13 @@ Após editar segredos, publicar a versão em **Production**. Nunca postar valore
 5. Checar `Eventos de webhook recebidos` e a seção `Mensagens recentes` no painel, com login Cloudflare Access.
 6. Se o contador permanecer zero, checar entrega dos webhooks, assinatura HMAC e logs do Worker antes de modificar o banco.
 
+## Quando o token é válido, mas a lista de contas retorna zero
+- `instagram_basic` e `instagram_manage_messages` podem estar aprovadas mesmo se `/me/assigned_instagram_accounts` retornar `data: []`.
+- `business_management_not_granted` significa que as consultas administrativas de portfólio não foram executadas; **não** implica que a permissão seja obrigatória para receber mensagens por uma conta já autorizada.
+- O Worker testa diretamente o identificador informado no Business Suite (`META_INSTAGRAM_ASSET_ID`) com `fields=id,username` e expõe apenas **código/subcódigo do erro**, nunca tokens, dados privados ou respostas completas da Meta. `business_asset_direct_lookup` com erro indica que o identificador não foi confirmado como IG User ID acessível.
+- Não tratar o ID numérico exibido no Business Suite como IG Graph User ID sem validação de `username`.
+- Se tanto a lista quanto a consulta direta falharem, recuperar o **IG User ID Graph** ou refazer a autorização do aplicativo no **mesmo portfólio correto** é mais seguro que gerar tokens indiscriminadamente. Verificar primeiro também se `@advisory.ofc` é profissional e se a Meta permite acesso externo às mensagens.
+
 ## Limitações atuais
 - Webhooks foram autorizados/configurados pelo usuário, mas não foi confirmado ainda o recebimento de uma mensagem real no D1.
 - Eventos antigos podem repetir registros por retentativas da Meta; a leitura faz deduplicação apenas para apresentação.
