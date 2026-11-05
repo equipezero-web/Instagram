@@ -1,0 +1,12 @@
+# Credenciais, tokens, caches e dependências locais
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.pem
+*.key
+*.log
+node_modules/
+.wrangler/
+.DS_Store
