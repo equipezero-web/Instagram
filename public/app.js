@@ -16,6 +16,17 @@ document.addEventListener("DOMContentLoaded",async()=>{
         const diagnostic=Array.isArray(data.checks)?data.checks.map(check=>check.source+": "+(check.ok?check.count+" ativo(s) listado(s)":"erro "+String(check.code))).join(" | "):"";
         const scopes=data.permissions_status?" Permissões: "+data.permissions_status+".":"";
         detail.textContent=(data.identity_verified?"Token reconhecido pela Meta. ":"Atenção: ")+(data.message||"A conta ainda não foi confirmada.")+scopes+(diagnostic?" Consultas: "+diagnostic:"");
+        if(data.code==="unified_login_token_unconfirmed"){
+          subscribeButton.disabled=true;
+          const link=document.createElement("a");
+          link.href="https://developers.facebook.com/apps/1437506684645376/";
+          link.target="_blank";
+          link.rel="noopener noreferrer";
+          link.textContent="Abrir o aplicativo Meta para obter o token do Login Unificado";
+          detail.append(" ",link);
+        }else{
+          subscribeButton.disabled=false;
+        }
         return;
       }
       meta.textContent="@"+data.username+" · autorizada";
