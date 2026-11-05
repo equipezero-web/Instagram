@@ -7,6 +7,8 @@ keep_vars = true
 ACCESS_AUD = "f56936d2ee069464b12758c6be0f99875701da2230a9d13fc96d36a58ab1f257"
 ACCESS_TEAM_DOMAIN = "lucaalves17-20.cloudflareaccess.com"
 ADMIN_EMAIL = "lucaalves17.20@gmail.com"
+META_BUSINESS_ID = "2184116235477697"
+META_INSTAGRAM_ASSET_ID = "972986455905159"
 
 [[d1_databases]]
 binding = "DB"
