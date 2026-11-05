@@ -74,10 +74,20 @@ async function graphRequest(env,path,method="GET",fields){
   }
 }
 async function findAssignedInstagram(env){
-  const identity=await graphRequest(env,"/me?fields=id");
+  // Em Unified Login, a Meta emite um Business Integration SUAT.
+  // Um token gerado manualmente em Business Settings pode reconhecer /me,
+  // mas não ter o client_business_id nem listar as contas compartilhadas pelo login.
+  const unifiedIdentity=await graphRequest(env,"/me?fields=id,client_business_id");
+  const identity=unifiedIdentity.ok?unifiedIdentity:await graphRequest(env,"/me?fields=id");
   if(!identity.ok)return {ok:false,code:"token_identity_failed",
     message:"A Meta não conseguiu validar a identidade do token: "+identity.message,
     graph_code:identity.code};
+  const clientBusinessId=unifiedIdentity.ok?unifiedIdentity.data?.client_business_id:null;
+  if(!clientBusinessId){
+    return {ok:false,code:"unified_login_token_unconfirmed",identity_verified:true,
+      message:"A Meta reconhece o token, porém não confirmou client_business_id (identificador do portfólio no Login Unificado). Como o token atual foi gerado manualmente em Usuários do sistema, use o token SUAT emitido em API setup with Unified Login após autorizar @advisory.ofc e o portfólio Sales Hub. Não é necessário recriar o aplicativo ou o usuário do sistema.",
+      checks:[{source:"unified_login_client_business_id",ok:false,code:unifiedIdentity.ok?"not_returned":unifiedIdentity.code}]};
+  }
   // O acesso ao /me não garante scopes suficientes para inventariar ativos.
   const permissionsProbe=await graphRequest(env,"/me/permissions?limit=100");
   const permissions=permissionsProbe.ok&&Array.isArray(permissionsProbe.data?.data)
