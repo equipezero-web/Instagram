@@ -14,7 +14,7 @@
 O arquivo `wrangler.toml` possui o binding D1, os assets e as variáveis **não secretas** de autenticação: `ACCESS_AUD`, `ACCESS_TEAM_DOMAIN` e `ADMIN_EMAIL`. A opção `keep_vars = true` preserva variáveis configuradas no dashboard quando o Wrangler publicar uma versão.
 
 **Nunca inserir valores de tokens/chaves no Git.** Configurar diretamente em **Workers & Pages → instagram-sales-hub → Settings → Variables and Secrets → Secret**:
-- `META_ACCESS_TOKEN`: token oficial da conta Instagram emitido pela Meta;
+- `META_ACCESS_TOKEN`: **Business Integration System User Access Token (SUAT)** emitido pelo **API setup with Unified Login** durante a autorização do Instagram e do portfólio correto. Um token gerado manualmente em **Business Settings → Usuários do sistema** não substitui necessariamente o token SUAT de integração e pode deixar `/me/assigned_instagram_accounts` vazio;
 - `META_VERIFY_TOKEN`: segredo escolhido para o desafio de verificação do webhook;
 - `META_APP_SECRET`: chave secreta do app Meta usada para validar a assinatura HMAC das requisições;
 - `ADMIN_TOKEN` (opcional): compatibilidade com acesso administrativo por bearer token. Cloudflare Access é a forma principal.
@@ -33,7 +33,7 @@ Após editar segredos, publicar a versão em **Production**. Nunca postar valore
 - `GET /health`: saúde do Worker e binding do D1 (não expõe segredos).
 - `GET /api/integration/status`: exige autenticação no Worker; informa presença dos segredos do webhook, disponibilidade do token e quantidade/data de eventos.
 - `GET /api/messages/recent`: exige autenticação; lê os últimos 250 eventos armazenados, extrai mensagens de `object: instagram`, remove duplicatas por ID, ignora mensagens de saída (`is_echo`) e devolve no máximo 50 mensagens de entrada reais.
-- `GET /api/integration/check`: verifica `/me`, tenta localizar `@advisory.ofc` em `assigned_instagram_accounts`, `instagram_business_accounts`, `owned_instagram_assets`, e só confirma a conta se o perfil obtido na Graph API tiver `username=advisory.ofc`. Pode indicar limitações de permissão nas consultas de portfólio sem presumir que o token está inválido. Consulta `/{ig-id}/subscribed_apps` somente após confirmar o IG Graph ID.
+- `GET /api/integration/check`: tenta confirmar `client_business_id` (indicador do fluxo Unified Login). Se o token for reconhecido mas não houver esse campo, aponta possível uso de token manual e evita novas consultas inválidas. Se confirmado, verifica `/me`, tenta localizar `@advisory.ofc` em `assigned_instagram_accounts`, `instagram_business_accounts`, `owned_instagram_assets`, e só confirma a conta se o perfil obtido na Graph API tiver `username=advisory.ofc`. Pode indicar limitações de permissão nas consultas de portfólio sem presumir que o token está inválido. Consulta `/{ig-id}/subscribed_apps` somente após confirmar o IG Graph ID.
 - `POST /api/integration/subscribe`: requer sessão administrativa e clique explícito do administrador; solicita a inscrição da conta `@advisory.ofc` em `messages,messaging_postbacks` usando somente o token secreto no backend.
 - O token nunca é enviado ao navegador. `instagram_connected` só pode ser interpretado como confirmado após verificação remota via `/api/integration/check` (não basta existir secret).
 - Por usar **Instagram Unified Login (SUAT)**, estas chamadas utilizam `graph.facebook.com`, não `graph.instagram.com`.
