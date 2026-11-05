@@ -77,8 +77,18 @@ async function findAssignedInstagram(env){
   const result=await graphRequest(env,"/me/assigned_instagram_accounts?fields=id,username&limit=100");
   if(!result.ok)return result;
   const accounts=Array.isArray(result.data?.data)?result.data.data:[];
+  if(!accounts.length){
+    // Consulta aceita pela Meta com lista vazia: isso é diferente de token inválido.
+    const identity=await graphRequest(env,"/me?fields=id,client_business_id");
+    return {ok:false,code:"no_instagram_assets_assigned",
+      message:"A Meta respondeu à consulta, mas retornou zero contas Instagram atribuídas a este token. Verifique o acesso aos ativos do usuário de sistema no portfólio Sales Hub.",
+      token_identity_verified:identity.ok,client_business_detected:!!identity.data?.client_business_id,
+      assigned_instagram_count:0};
+  }
   const account=accounts.find(a=>String(a?.username||"").replace(/^@/,"").toLowerCase()==="advisory.ofc");
-  if(!account?.id)return {ok:false,code:"account_not_assigned",message:"@advisory.ofc não foi encontrada entre os ativos autorizados por este token."};
+  if(!account?.id)return {ok:false,code:"target_instagram_not_shared",
+    message:"A Meta retornou "+accounts.length+" conta(s) Instagram para o token, mas não @advisory.ofc. Confira qual conta foi compartilhada na autorização.",
+    assigned_instagram_count:accounts.length};
   return {ok:true,account_id:String(account.id),username:String(account.username)};
 }
 function subscribedFields(data){
