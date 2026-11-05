@@ -14,7 +14,8 @@ document.addEventListener("DOMContentLoaded",async()=>{
       if(!response.ok)throw Error(data.message||"HTTP "+response.status);
       if(!data.connected){
         const diagnostic=Array.isArray(data.checks)?data.checks.map(check=>check.source+": "+(check.ok?check.count+" ativo(s) listado(s)":"erro "+String(check.code))).join(" | "):"";
-        detail.textContent=(data.identity_verified?"Token reconhecido pela Meta. ":"Atenção: ")+(data.message||"A conta ainda não foi confirmada.")+(diagnostic?" Consultas: "+diagnostic:"");
+        const scopes=data.permissions_status?" Permissões: "+data.permissions_status+".":"";
+        detail.textContent=(data.identity_verified?"Token reconhecido pela Meta. ":"Atenção: ")+(data.message||"A conta ainda não foi confirmada.")+scopes+(diagnostic?" Consultas: "+diagnostic:"");
         return;
       }
       meta.textContent="@"+data.username+" · autorizada";
