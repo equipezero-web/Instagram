@@ -1,0 +1,20 @@
+name = "instagram-sales-hub"
+main = "src/worker.js"
+compatibility_date = "2026-11-01"
+keep_vars = true
+
+[vars]
+ACCESS_AUD = "f56936d2ee069464b12758c6be0f99875701da2230a9d13fc96d36a58ab1f257"
+ACCESS_TEAM_DOMAIN = "lucaalves17-20.cloudflareaccess.com"
+ADMIN_EMAIL = "lucaalves17.20@gmail.com"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "instagram-sales-hub-db"
+database_id = "29a7cb3b-efe7-4a41-aecb-6d573f460aad"
+migrations_dir = "migrations"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/health", "/api/*", "/webhooks/*"]
