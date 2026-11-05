@@ -13,7 +13,8 @@ document.addEventListener("DOMContentLoaded",async()=>{
       const data=await response.json();
       if(!response.ok)throw Error(data.message||"HTTP "+response.status);
       if(!data.connected){
-        detail.textContent="Atenção: "+(data.message||"A conta não está autorizada pelo token salvo.");
+        const diagnostic=Array.isArray(data.checks)?data.checks.map(check=>check.source+": "+(check.ok?check.count+" ativo(s) listado(s)":"erro "+String(check.code))).join(" | "):"";
+        detail.textContent=(data.identity_verified?"Token reconhecido pela Meta. ":"Atenção: ")+(data.message||"A conta ainda não foi confirmada.")+(diagnostic?" Consultas: "+diagnostic:"");
         return;
       }
       meta.textContent="@"+data.username+" · autorizada";
