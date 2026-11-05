@@ -13,16 +13,21 @@ document.addEventListener("DOMContentLoaded",async()=>{
       const data=await response.json();
       if(!response.ok)throw Error(data.message||"HTTP "+response.status);
       if(!data.connected){
-        const diagnostic=Array.isArray(data.checks)?data.checks.map(check=>check.source+": "+(check.ok?check.count+" ativo(s) listado(s)":"erro "+String(check.code))).join(" | "):"";
+        const diagnostic=Array.isArray(data.checks)?data.checks.map(check=>{
+          const result=check.ok
+            ?(typeof check.count==="number"?check.count+" ativo(s)":check.code==="ok"||check.code==="valid"?"confirmado":String(check.code||"confirmado"))
+            :"erro "+String(check.code)+(check.subcode?" / subcódigo "+check.subcode:"");
+          return check.source+": "+result;
+        }).join(" | "):"";
         const scopes=data.permissions_status?" Permissões: "+data.permissions_status+".":"";
-        detail.textContent=(data.identity_verified?"Token reconhecido pela Meta. ":"Atenção: ")+(data.message||"A conta ainda não foi confirmada.")+scopes+(diagnostic?" Consultas: "+diagnostic:"");
-        if(data.code==="unified_login_token_unconfirmed"){
+        detail.textContent=(data.token_valid===true?"Token validado pela Meta. ":data.token_valid===false?"Token inválido. ":data.identity_verified?"Identidade respondida pela Meta; validade não confirmada. ":"Atenção: ")+(data.message||"A conta ainda não foi confirmada.")+scopes+(diagnostic?" Consultas: "+diagnostic:"");
+        if(data.token_valid===false||data.code==="token_app_mismatch"||data.code==="token_invalid_or_expired"||data.code==="token_identity_failed"){
           subscribeButton.disabled=true;
           const link=document.createElement("a");
           link.href="https://developers.facebook.com/apps/1437506684645376/";
           link.target="_blank";
           link.rel="noopener noreferrer";
-          link.textContent="Abrir o aplicativo Meta para obter o token do Login Unificado";
+          link.textContent="Abrir Meta Developers para conferir a autorização ou gerar um token válido";
           detail.append(" ",link);
         }else{
           subscribeButton.disabled=false;
