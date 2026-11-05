@@ -167,6 +167,15 @@ async function findAssignedInstagram(env){
   if(/^\d{7,22}$/.test(candidateId))candidateIds.add(candidateId);
   for(const id of [...candidateIds].slice(0,20)){
     const result=await graphRequest(env,"/"+encodeURIComponent(id)+"?fields=id,username");
+    const fromBusinessAsset=id===candidateId;
+    checks.push({
+      source:fromBusinessAsset?"business_asset_direct_lookup":"instagram_id_direct_lookup",
+      ok:result.ok,
+      code:result.ok
+        ?(String(result.data?.username||"").replace(/^@/,"").toLowerCase()==="advisory.ofc"?"matched":"different_account_or_not_instagram")
+        :result.code,
+      ...(result.subcode?{subcode:result.subcode}:{}),
+    });
     if(!result.ok)continue;
     if(String(result.data?.username||"").replace(/^@/,"").toLowerCase()==="advisory.ofc"){
       return {ok:true,account_id:String(result.data.id||id),username:"advisory.ofc",
@@ -182,7 +191,7 @@ async function findAssignedInstagram(env){
     missing_permissions:missing,
     message:missing.length?
       "A Meta validou o token, mas estão ausentes estas permissões: "+missing.join(", ")+".":
-      "A Meta aceitou o token na consulta de identidade, mas ainda não conseguimos identificar @advisory.ofc entre os ativos compartilhados. Confira o resultado das consultas abaixo.",
+      "O token e as permissões do Direct estão válidos, mas a Meta não retornou @advisory.ofc na lista de contas. Testamos também o ID do ativo informado pelo Business Suite. O resultado da consulta direta aparece abaixo; o ID do ativo pode ser diferente do ID de usuário do Instagram Graph API.",
     checks};
 }
 function subscribedFields(data){
