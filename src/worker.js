@@ -52,12 +52,71 @@ async function getRecentInstagramMessages(db){
   messages.sort((a,b)=>String(b.occurred_at).localeCompare(String(a.occurred_at)));
   return messages.slice(0,50);
 }
+
+// Diagnóstico privado: Login Unificado usa graph.facebook.com e SUAT.
+const META_GRAPH_VERSION="v26.0";
+async function graphRequest(env,path,method="GET",fields){
+  if(!env.META_ACCESS_TOKEN)return {ok:false,code:"token_missing",message:"META_ACCESS_TOKEN não está disponível no Worker."};
+  try{
+    const response=await fetch("https://graph.facebook.com/"+META_GRAPH_VERSION+path,{
+      method,
+      headers:{"Authorization":"Bearer "+env.META_ACCESS_TOKEN,...(fields?{"Content-Type":"application/x-www-form-urlencoded"}:{})},
+      ...(fields?{body:new URLSearchParams(fields).toString()}:{})
+    });
+    const data=await response.json();
+    if(!response.ok||data?.error){
+      return {ok:false,code:String(data?.error?.code??"meta_http_"+response.status),
+        message:String(data?.error?.message||"Falha na API da Meta.").slice(0,240)};
+    }
+    return {ok:true,data};
+  }catch{
+    return {ok:false,code:"meta_unreachable",message:"Não foi possível consultar a API da Meta neste momento."};
+  }
+}
+async function findAssignedInstagram(env){
+  const result=await graphRequest(env,"/me/assigned_instagram_accounts?fields=id,username&limit=100");
+  if(!result.ok)return result;
+  const accounts=Array.isArray(result.data?.data)?result.data.data:[];
+  const account=accounts.find(a=>String(a?.username||"").replace(/^@/,"").toLowerCase()==="advisory.ofc");
+  if(!account?.id)return {ok:false,code:"account_not_assigned",message:"@advisory.ofc não foi encontrada entre os ativos autorizados por este token."};
+  return {ok:true,account_id:String(account.id),username:String(account.username)};
+}
+function subscribedFields(data){
+  const applications=Array.isArray(data?.data)?data.data:[];
+  return [...new Set(applications.flatMap(app=>Array.isArray(app?.subscribed_fields)?app.subscribed_fields:[]))];
+}
+async function checkMetaIntegration(env){
+  const account=await findAssignedInstagram(env);
+  if(!account.ok)return {connected:false,...account};
+  const subscription=await graphRequest(env,"/"+encodeURIComponent(account.account_id)+"/subscribed_apps");
+  if(!subscription.ok)return {connected:true,username:account.username,account_id:account.account_id,
+    subscription_checked:false,subscription_error:subscription.message,subscription_error_code:subscription.code};
+  const fields=subscribedFields(subscription.data);
+  return {connected:true,username:account.username,account_id:account.account_id,
+    subscription_checked:true,subscribed_fields:fields,
+    messages_subscribed:fields.includes("messages"),
+    postbacks_subscribed:fields.includes("messaging_postbacks")};
+}
 export default {async fetch(req,env){const url=new URL(req.url);if(url.pathname==="/health")return json({ok:true,service:"instagram-sales-hub",database:!!env.DB});
 if(url.pathname==="/webhooks/instagram"&&req.method==="GET"){if(!env.META_VERIFY_TOKEN)return json({error:"not_configured"},503);const p=url.searchParams;return p.get("hub.mode")==="subscribe"&&p.get("hub.verify_token")===env.META_VERIFY_TOKEN?new Response(p.get("hub.challenge")||""):json({error:"invalid_challenge"},403)}
 if(url.pathname==="/webhooks/instagram"&&req.method==="POST"){if(!env.META_APP_SECRET||!env.DB)return json({error:"not_configured"},503);const signature=req.headers.get("x-hub-signature-256")||"";if(!/^sha256=[a-f0-9]{64}$/i.test(signature))return json({error:"invalid_signature"},401);const raw=await req.arrayBuffer(),key=await crypto.subtle.importKey("raw",new TextEncoder().encode(env.META_APP_SECRET),{name:"HMAC",hash:"SHA-256"},false,["sign"]);const signed=Array.from(new Uint8Array(await crypto.subtle.sign("HMAC",key,raw)),v=>v.toString(16).padStart(2,"0")).join("");const expected="sha256="+signed;if(expected.length!==signature.length||![...expected].every((c,i)=>c===signature[i]))return json({error:"invalid_signature"},401);let body;try{body=JSON.parse(new TextDecoder().decode(raw))}catch{return json({error:"invalid_json"},400)};await env.DB.prepare("INSERT INTO webhook_events (payload,received_at) VALUES (?,datetime('now'))").bind(JSON.stringify(body)).run();return json({received:true})}
 if(req.method==="GET" && (url.pathname==="/" || url.pathname==="/index.html" || url.pathname==="/style.css" || url.pathname==="/app.js")){if(!env.ASSETS)return json({error:"assets_not_bound"},503);return env.ASSETS.fetch(req)}
 if(!await accessAuthorized(req,env) && !await authorized(req,env))return json({error:"unauthorized"},401);if(!env.DB)return json({error:"database_not_bound"},503);
 if(url.pathname==="/api/integration/status"&&req.method==="GET"){const configured=!!(env.META_APP_SECRET&&env.META_VERIFY_TOKEN);const count=await env.DB.prepare("SELECT COUNT(*) AS total, MAX(received_at) AS latest FROM webhook_events").first();return json({webhook_configured:configured,webhook_events:Number(count?.total||0),last_event_at:count?.latest||null,instagram_token_configured:!!env.META_ACCESS_TOKEN,instagram_connected:false,messages_available:false,ad_contacts_available:false})}
+if(url.pathname==="/api/integration/check"&&req.method==="GET"){
+  return json(await checkMetaIntegration(env));
+}
+if(url.pathname==="/api/integration/subscribe"&&req.method==="POST"){
+  const origin=req.headers.get("Origin");
+  if(origin&&origin!==url.origin)return json({error:"invalid_origin"},403);
+  const account=await findAssignedInstagram(env);
+  if(!account.ok)return json({success:false,code:account.code,message:account.message},422);
+  const response=await graphRequest(env,"/"+encodeURIComponent(account.account_id)+"/subscribed_apps","POST",
+    {subscribed_fields:"messages,messaging_postbacks"});
+  if(!response.ok)return json({success:false,code:response.code,message:response.message},422);
+  if(response.data?.success!==true)return json({success:false,message:"A Meta não confirmou a assinatura.",details:"Confira os logs da API da Meta."},422);
+  return json({success:true,username:account.username,message:"Conta inscrita em messages e messaging_postbacks."});
+}
 if(url.pathname==="/api/messages/recent"&&req.method==="GET"){return json({items:await getRecentInstagramMessages(env.DB)});}
 return json({error:"not_found"},404)
 }};
