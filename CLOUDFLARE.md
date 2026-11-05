@@ -32,15 +32,18 @@ Após editar segredos, publicar a versão em **Production**. Nunca postar valore
 - `GET /health`: saúde do Worker e binding do D1 (não expõe segredos).
 - `GET /api/integration/status`: exige autenticação no Worker; informa presença dos segredos do webhook, disponibilidade do token e quantidade/data de eventos.
 - `GET /api/messages/recent`: exige autenticação; lê os últimos 250 eventos armazenados, extrai mensagens de `object: instagram`, remove duplicatas por ID, ignora mensagens de saída (`is_echo`) e devolve no máximo 50 mensagens de entrada reais.
-- O painel não busca nomes de usuários nem executa chamadas ao Graph API com `META_ACCESS_TOKEN`; o token presente não significa que tenha sido validado contra a Meta.
+- `GET /api/integration/check`: consulta o Graph API `v26.0` com o token do Worker, verifica se `@advisory.ofc` está entre as contas atribuídas e confere os campos em `/{ig-id}/subscribed_apps`.
+- `POST /api/integration/subscribe`: requer sessão administrativa e clique explícito do administrador; solicita a inscrição da conta `@advisory.ofc` em `messages,messaging_postbacks` usando somente o token secreto no backend.
+- O token nunca é enviado ao navegador. `instagram_connected` só pode ser interpretado como confirmado após verificação remota via `/api/integration/check` (não basta existir secret).
+- Por usar **Instagram Unified Login (SUAT)**, estas chamadas utilizam `graph.facebook.com`, não `graph.instagram.com`.
 - A indicação de origem de anúncio depende de metadados `ads_context_data` ou `referral` realmente recebidos, e não permite inferir origem quando a Meta não os envia.
 - Não há cadastro manual de produtos, campanhas, interessados ou respostas.
 
 ## Verificação funcional
 1. Confirmar os segredos na área **Runtime / Variables and Secrets** do Worker.
 2. Abrir `/webhooks/instagram` no navegador: `{"error":"invalid_challenge"}` indica que o token de verificação foi carregado (a validação real é feita pela Meta).
-3. No Meta Developers, verificar a inscrição do campo `messages`.
-4. Enviar uma DM de outra conta que seja elegível/autorizada para testes enquanto o app estiver em modo de desenvolvimento.
+3. No Meta Developers, verificar a inscrição do campo `messages` e, no painel, clicar em **Verificar conexão**. Se a conta for autorizada mas não tiver o campo `messages` na assinatura da conta, clicar em **Ativar recebimento de DMs**.
+4. Enviar uma DM nova de outra conta que seja elegível/autorizada para testes enquanto o app estiver em modo de desenvolvimento. O usuário remetente poderá precisar de função de testador aceita no aplicativo.
 5. Checar `Eventos de webhook recebidos` e a seção `Mensagens recentes` no painel, com login Cloudflare Access.
 6. Se o contador permanecer zero, checar entrega dos webhooks, assinatura HMAC e logs do Worker antes de modificar o banco.
 
