@@ -74,22 +74,44 @@ async function graphRequest(env,path,method="GET",fields){
   }
 }
 async function findAssignedInstagram(env){
-  const result=await graphRequest(env,"/me/assigned_instagram_accounts?fields=id,username&limit=100");
-  if(!result.ok)return result;
-  const accounts=Array.isArray(result.data?.data)?result.data.data:[];
-  if(!accounts.length){
-    // Consulta aceita pela Meta com lista vazia: isso é diferente de token inválido.
-    const identity=await graphRequest(env,"/me?fields=id,client_business_id");
-    return {ok:false,code:"no_instagram_assets_assigned",
-      message:"A Meta respondeu à consulta, mas retornou zero contas Instagram atribuídas a este token. Verifique o acesso aos ativos do usuário de sistema no portfólio Sales Hub.",
-      token_identity_verified:identity.ok,client_business_detected:!!identity.data?.client_business_id,
-      assigned_instagram_count:0};
+  // /me/assigned_instagram_accounts é útil para tokens de integração do Login Unificado,
+  // porém pode retornar [] para tokens de System User criados no próprio portfólio.
+  const identity=await graphRequest(env,"/me?fields=id");
+  if(!identity.ok)return {ok:false,code:"token_identity_failed",message:"A Meta não conseguiu validar a identidade do token: "+identity.message,graph_code:identity.code};
+  const businessId=String(env.META_BUSINESS_ID||"2184116235477697");
+  const candidateId=String(env.META_INSTAGRAM_ASSET_ID||"972986455905159");
+  const methods=[
+    {name:"unified_login_assets",path:"/me/assigned_instagram_accounts?fields=id,username&limit=100"},
+    {name:"business_instagram_accounts",path:"/"+encodeURIComponent(businessId)+"/instagram_business_accounts?fields=id,username&limit=100"},
+    {name:"business_owned_instagram_assets",path:"/"+encodeURIComponent(businessId)+"/owned_instagram_assets?fields=id&limit=100"}
+  ];
+  const checks=[];
+  const candidateIds=new Set();
+  for(const method of methods){
+    const result=await graphRequest(env,method.path);
+    if(!result.ok){checks.push({source:method.name,ok:false,code:result.code});continue;}
+    const accounts=Array.isArray(result.data?.data)?result.data.data:[];
+    checks.push({source:method.name,ok:true,count:accounts.length});
+    for(const item of accounts){
+      if(item?.id)candidateIds.add(String(item.id));
+      if(String(item?.username||"").replace(/^@/,"").toLowerCase()==="advisory.ofc"&&item?.id){
+        return {ok:true,account_id:String(item.id),username:"advisory.ofc",discovery_source:method.name,identity_verified:true};
+      }
+    }
   }
-  const account=accounts.find(a=>String(a?.username||"").replace(/^@/,"").toLowerCase()==="advisory.ofc");
-  if(!account?.id)return {ok:false,code:"target_instagram_not_shared",
-    message:"A Meta retornou "+accounts.length+" conta(s) Instagram para o token, mas não @advisory.ofc. Confira qual conta foi compartilhada na autorização.",
-    assigned_instagram_count:accounts.length};
-  return {ok:true,account_id:String(account.id),username:String(account.username)};
+  // O ID publicado no Business Suite é um identificador de ativo e pode não ser
+  // o IG User ID da Graph API; só o aceitamos se o Graph confirmar o username.
+  if(/^\d{7,22}$/.test(candidateId))candidateIds.add(candidateId);
+  for(const id of [...candidateIds].slice(0,20)){
+    const result=await graphRequest(env,"/"+encodeURIComponent(id)+"?fields=id,username");
+    if(!result.ok)continue;
+    if(String(result.data?.username||"").replace(/^@/,"").toLowerCase()==="advisory.ofc"){
+      return {ok:true,account_id:String(result.data.id||id),username:"advisory.ofc",discovery_source:"direct_profile",identity_verified:true};
+    }
+  }
+  return {ok:false,code:"account_discovery_inconclusive",identity_verified:true,
+    message:"O novo token respondeu à Meta, mas nenhum método confirmou o ID Graph API de @advisory.ofc. Uma lista vazia de assigned_instagram_accounts não comprova falta de acesso.",
+    checks};
 }
 function subscribedFields(data){
   const applications=Array.isArray(data?.data)?data.data:[];
