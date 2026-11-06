@@ -228,7 +228,53 @@ async function checkMetaIntegration(env){
 }
 export default {async fetch(req,env){const url=new URL(req.url);if(url.pathname==="/health")return json({ok:true,service:"instagram-sales-hub",database:!!env.DB});
 if(url.pathname==="/webhooks/instagram"&&req.method==="GET"){if(!env.META_VERIFY_TOKEN)return json({error:"not_configured"},503);const p=url.searchParams;return p.get("hub.mode")==="subscribe"&&p.get("hub.verify_token")===env.META_VERIFY_TOKEN?new Response(p.get("hub.challenge")||""):json({error:"invalid_challenge"},403)}
-if(url.pathname==="/webhooks/instagram"&&req.method==="POST"){if(!env.META_APP_SECRET||!env.DB)return json({error:"not_configured"},503);const signature=req.headers.get("x-hub-signature-256")||"";if(!/^sha256=[a-f0-9]{64}$/i.test(signature))return json({error:"invalid_signature"},401);const raw=await req.arrayBuffer(),key=await crypto.subtle.importKey("raw",new TextEncoder().encode(env.META_APP_SECRET),{name:"HMAC",hash:"SHA-256"},false,["sign"]);const signed=Array.from(new Uint8Array(await crypto.subtle.sign("HMAC",key,raw)),v=>v.toString(16).padStart(2,"0")).join("");const expected="sha256="+signed;if(expected.length!==signature.length||![...expected].every((c,i)=>c===signature[i]))return json({error:"invalid_signature"},401);let body;try{body=JSON.parse(new TextDecoder().decode(raw))}catch{return json({error:"invalid_json"},400)};await env.DB.prepare("INSERT INTO webhook_events (payload,received_at) VALUES (?,datetime('now'))").bind(JSON.stringify(body)).run();return json({received:true})}
+if(url.pathname==="/webhooks/instagram"&&req.method==="POST"){
+  // Registros técnicos sem IP, token, assinatura ou conteúdo de mensagens.
+  const log=(stage,status)=>console.info("sales_hub_webhook",JSON.stringify({stage,status}));
+  if(!env.META_APP_SECRET||!env.DB){
+    log("runtime_secret_or_database_missing",503);
+    return json({error:"not_configured"},503);
+  }
+  const signature=req.headers.get("x-hub-signature-256")||"";
+  if(!/^sha256=[a-f0-9]{64}$/i.test(signature)){
+    log("invalid_signature_header",401);
+    return json({error:"invalid_signature"},401);
+  }
+  let raw;
+  try{raw=await req.arrayBuffer()}catch{
+    log("body_read_error",400);
+    return json({error:"invalid_body"},400);
+  }
+  let signed;
+  try{
+    const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(env.META_APP_SECRET),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
+    signed=Array.from(new Uint8Array(await crypto.subtle.sign("HMAC",key,raw)),v=>v.toString(16).padStart(2,"0")).join("");
+  }catch{
+    log("signature_computation_error",500);
+    return json({error:"signature_verification_failed"},500);
+  }
+  const expected="sha256="+signed;
+  const actual=signature.toLowerCase();
+  if(expected.length!==actual.length||![...expected].every((c,i)=>c===actual[i])){
+    log("signature_mismatch",401);
+    return json({error:"invalid_signature"},401);
+  }
+  let body;
+  try{body=JSON.parse(new TextDecoder().decode(raw))}catch{
+    log("invalid_json",400);
+    return json({error:"invalid_json"},400);
+  }
+  try{
+    await env.DB.prepare("INSERT INTO webhook_events (payload,received_at) VALUES (?,datetime('now'))")
+      .bind(JSON.stringify(body)).run();
+  }catch{
+    log("database_insert_failed",500);
+    return json({error:"database_insert_failed"},500);
+  }
+  log("event_saved",200);
+  return json({received:true});
+}
+
 if(req.method==="GET" && (url.pathname==="/" || url.pathname==="/index.html" || url.pathname==="/style.css" || url.pathname==="/app.js")){if(!env.ASSETS)return json({error:"assets_not_bound"},503);return env.ASSETS.fetch(req)}
 if(!await accessAuthorized(req,env) && !await authorized(req,env))return json({error:"unauthorized"},401);if(!env.DB)return json({error:"database_not_bound"},503);
 if(url.pathname==="/api/integration/status"&&req.method==="GET"){const configured=!!(env.META_APP_SECRET&&env.META_VERIFY_TOKEN);const count=await env.DB.prepare("SELECT COUNT(*) AS total, MAX(received_at) AS latest FROM webhook_events").first();return json({webhook_configured:configured,webhook_events:Number(count?.total||0),last_event_at:count?.latest||null,instagram_token_configured:!!env.META_ACCESS_TOKEN,instagram_connected:false,messages_available:false,ad_contacts_available:false})}
