@@ -113,19 +113,23 @@ async function findAssignedInstagram(env){
   }
   const identity=await graphRequest(env,"/me?fields=id");
   checks.push({source:"token_identity",ok:identity.ok,code:identity.ok?"ok":identity.code});
-  if(!identity.ok){
-    return {ok:false,code:identity.code==="190"?"token_invalid_or_expired":"token_identity_failed",
+  // A consulta /me pode não estar autorizada para alguns tokens de sistema/Instagram.
+  // Não encerrar o diagnóstico por erro de permissão: o acesso direto ao IG ID é
+  // uma verificação independente e utiliza somente a permissão de Instagram.
+  if(!identity.ok&&identity.code==="190"){
+    return {ok:false,code:"token_invalid_or_expired",
       token_valid:debug.ok?debug.is_valid:null,identity_verified:false,
-      message:identity.code==="190"?
-        "A Meta retornou erro 190 na validação de identidade. Confira se o token está vigente; a inspeção do token informa se ele é válido.":
-        "A Meta recusou a consulta de identidade do token (código "+identity.code+").",
-      graph_subcode:identity.subcode??null,checks};
+      message:"A Meta devolveu erro 190 ao consultar /me. Confira a validade do token pelo depurador da Meta.",checks};
   }
-  // client_business_id é uma informação adicional, não prova de token correto/incorreto.
-  const clientBusiness=await graphRequest(env,"/me?fields=client_business_id");
-  checks.push({source:"client_business_id",ok:clientBusiness.ok,
-    code:clientBusiness.ok?(clientBusiness.data?.client_business_id?"found":"not_returned"):clientBusiness.code,
-    ...(clientBusiness.subcode?{subcode:clientBusiness.subcode}:{})});
+  if(identity.ok){
+    // client_business_id é opcional e não prova de validade do token.
+    const clientBusiness=await graphRequest(env,"/me?fields=client_business_id");
+    checks.push({source:"client_business_id",ok:clientBusiness.ok,
+      code:clientBusiness.ok?(clientBusiness.data?.client_business_id?"found":"not_returned"):clientBusiness.code,
+      ...(clientBusiness.subcode?{subcode:clientBusiness.subcode}:{})});
+  }else{
+    checks.push({source:"client_business_id",ok:false,code:"not_attempted_identity_unavailable"});
+  }
   const scopes=debug.ok?debug.scopes:null;
   // ID identificado na tela API setup with Unified Login (Meta Developers).
   // É diferente do ID de ativo apresentado no Business Suite.
@@ -200,14 +204,18 @@ async function findAssignedInstagram(env){
         discovery_source:"direct_profile",permissions:scopes,checks};
     }
   }
-  return {ok:false,code:missing.length?"instagram_scopes_missing":"account_discovery_inconclusive",
-    token_valid:debug.ok?debug.is_valid:null,identity_verified:true,
+  const accessDenied=[debug,identity,direct].some(c=>!c.ok&&c.code==="200");
+  return {ok:false,code:missing.length?"instagram_scopes_missing":
+      accessDenied?"meta_permission_denied":"account_discovery_inconclusive",
+    token_valid:debug.ok?debug.is_valid:null,identity_verified:identity.ok,
     token_type:debug.ok?debug.type:null,permissions:scopes,
     permissions_status:scopes===null?"inspeção indisponível":scopes.join(", ")||"nenhum scope retornado",
     missing_permissions:missing,
     message:missing.length?
-      "A Meta validou o token, mas estão ausentes estas permissões: "+missing.join(", ")+".":
-      "O token está válido, mas não conseguimos confirmar a conta @advisory.ofc. Testamos primeiro o ID de usuário exibido na própria configuração Meta Developers; confira o código em meta_setup_ig_user_id para saber por que a consulta não foi reconhecida.",
+      "A Meta informou que faltam permissões no token: "+missing.join(", ")+".":
+      accessDenied?
+        "A Meta retornou erro de permissão (código 200) em uma ou mais consultas. Isso não prova que o token expirou. A consulta direta da conta também foi tentada; veja os códigos abaixo. O recebimento de webhooks deve ser investigado separadamente.":
+        "Não foi possível confirmar @advisory.ofc na API. A consulta direta ao IG User ID foi tentada; veja o resultado de meta_setup_ig_user_id abaixo.",
     checks};
 }
 function subscribedFields(data){
