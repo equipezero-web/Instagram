@@ -55,6 +55,24 @@ async function getRecentInstagramMessages(db){
 
 // Diagnóstico privado: Login Unificado usa graph.facebook.com e SUAT.
 const META_GRAPH_VERSION="v26.0";
+function metaSafeErrorDetails(error,env){
+  // Apenas diagnóstico para o painel protegido por Cloudflare Access.
+  // Nunca retornar tokens, segredo, URLs ou identificadores de rastreamento.
+  const raw=String(error?.message||error?.error_user_msg||"");
+  let safe=raw;
+  for(const secret of [env.META_ACCESS_TOKEN,env.META_APP_SECRET,env.META_VERIFY_TOKEN]){
+    if(typeof secret==="string"&&secret.length>=8)safe=safe.split(secret).join("[oculto]");
+  }
+  safe=safe
+    .replace(/(?:access_token|input_token|client_secret|appsecret_proof|app_secret)\s*[=:]\s*[^\s&;,]+/gi,"[credencial oculta]")
+    .replace(/\bBearer\s+\S+/gi,"Bearer [oculto]")
+    .replace(/\b(?:EAA|IGA|IGQV|IGAA)[A-Za-z0-9_\-]{15,}\b/g,"[token oculto]")
+    .replace(/https?:\/\/\S+/gi,"[URL oculta]")
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g,"[email oculto]")
+    .replace(/[\r\n\t]+/g," ").trim();
+  return {type:String(error?.type||"").slice(0,45),reason:safe.slice(0,220)};
+}
+
 async function graphRequest(env,path,method="GET",fields){
   if(!env.META_ACCESS_TOKEN)return {ok:false,code:"token_missing",message:"META_ACCESS_TOKEN não está disponível no Worker."};
   try{
@@ -65,8 +83,10 @@ async function graphRequest(env,path,method="GET",fields){
     });
     const data=await response.json();
     if(!response.ok||data?.error){
+      const safe=metaSafeErrorDetails(data?.error,env);
       return {ok:false,code:String(data?.error?.code??"meta_http_"+response.status),
-        message:String(data?.error?.message||"Falha na API da Meta.").slice(0,240),subcode:data?.error?.error_subcode??null};
+        message:safe.reason||"Falha na API da Meta.",error_type:safe.type,
+        subcode:data?.error?.error_subcode??null};
     }
     return {ok:true,data};
   }catch{
@@ -86,7 +106,9 @@ async function debugMetaToken(env){
     });
     const result=await response.json();
     if(!response.ok||result.error){
+      const safe=metaSafeErrorDetails(result.error,env);
       return {ok:false,code:String(result.error?.code??response.status),
+        message:safe.reason,error_type:safe.type,
         subcode:result.error?.error_subcode??null};
     }
     const data=result.data||{};
@@ -101,7 +123,9 @@ async function debugMetaToken(env){
 async function findAssignedInstagram(env){
   const debug=await debugMetaToken(env);
   const checks=[{source:"debug_token",ok:debug.ok,
-    code:debug.ok?(debug.is_valid?"valid":"invalid"):debug.code}];
+    code:debug.ok?(debug.is_valid?"valid":"invalid"):debug.code,
+    ...(!debug.ok&&debug.message?{reason:debug.message}:{}),
+    ...(!debug.ok&&debug.error_type?{error_type:debug.error_type}:{})}];
   if(debug.ok&&!debug.is_valid){
     return {ok:false,code:"token_invalid",token_valid:false,identity_verified:false,
       message:"A verificação oficial da Meta confirmou que META_ACCESS_TOKEN está inválido ou não está mais ativo. Substitua-o por um token válido emitido para o Sales Hub.",checks};
@@ -112,7 +136,9 @@ async function findAssignedInstagram(env){
       message:"O token é válido, mas foi emitido para outro aplicativo da Meta, não para Sales Hub.",checks};
   }
   const identity=await graphRequest(env,"/me?fields=id");
-  checks.push({source:"token_identity",ok:identity.ok,code:identity.ok?"ok":identity.code});
+  checks.push({source:"token_identity",ok:identity.ok,code:identity.ok?"ok":identity.code,
+    ...(!identity.ok&&identity.message?{reason:identity.message}:{}),
+    ...(!identity.ok&&identity.error_type?{error_type:identity.error_type}:{})});
   // A consulta /me pode não estar autorizada para alguns tokens de sistema/Instagram.
   // Não encerrar o diagnóstico por erro de permissão: o acesso direto ao IG ID é
   // uma verificação independente e utiliza somente a permissão de Instagram.
@@ -140,6 +166,8 @@ async function findAssignedInstagram(env){
     String(direct.data?.username||"").replace(/^@/,"").toLowerCase()===expectedUsername;
   checks.push({source:"meta_setup_ig_user_id",ok:direct.ok,
     code:direct.ok?(directMatched?"matched":"different_username"):direct.code,
+    ...(!direct.ok&&direct.message?{reason:direct.message}:{}),
+    ...(!direct.ok&&direct.error_type?{error_type:direct.error_type}:{}),
     ...(direct.subcode?{subcode:direct.subcode}:{})});
   if(directMatched){
     return {ok:true,account_id:String(direct.data.id||igId),username:expectedUsername,
