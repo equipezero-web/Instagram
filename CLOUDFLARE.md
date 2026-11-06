@@ -6,6 +6,7 @@
 - Banco D1: `instagram-sales-hub-db`
 - Branch de produção: `feat/personal-sales-dashboard`
 - Meta Business Portfolio ID: `2184116235477697`; Instagram Business Suite asset ID: `972986455905159` (pode ser diferente do Graph API IG User ID)
+- Instagram ID exibido na configuração de Login Unificado da Meta: `17841449038623629`, registrado em `META_INSTAGRAM_USER_ID` (não sensível). A API valida `username` antes de associá-lo a `@advisory.ofc`.
 - Instagram autorizado na Meta: `@advisory.ofc`
 - Aplicativo Meta: `Sales Hub`
 - A aplicação administrativa permanece protegida pelo Cloudflare Access.
@@ -56,6 +57,9 @@ Após editar segredos, publicar a versão em **Production**. Nunca postar valore
 6. Se o contador permanecer zero, checar entrega dos webhooks, assinatura HMAC e logs do Worker antes de modificar o banco.
 
 ## Quando o token é válido, mas a lista de contas retorna zero
+O Worker testa **primeiro** `GET /17841449038623629?fields=id,username` com `META_ACCESS_TOKEN`, e registra o resultado em `meta_setup_ig_user_id`. Isso evita confundir o ID `972986455905159` do ativo do Business Suite com o ID mostrado no setup do Instagram. O perfil só é marcado conectado se o nome retornado corresponder a `advisory.ofc`. Uma falha nessa consulta não autoriza concluir que o token seja inválido.
+
+
 - `instagram_basic` e `instagram_manage_messages` podem estar aprovadas mesmo se `/me/assigned_instagram_accounts` retornar `data: []`.
 - `business_management_not_granted` significa que as consultas administrativas de portfólio não foram executadas; **não** implica que a permissão seja obrigatória para receber mensagens por uma conta já autorizada.
 - O Worker testa diretamente o identificador informado no Business Suite (`META_INSTAGRAM_ASSET_ID`) com `fields=id,username` e expõe apenas **código/subcódigo do erro**, nunca tokens, dados privados ou respostas completas da Meta. `business_asset_direct_lookup` com erro indica que o identificador não foi confirmado como IG User ID acessível.
