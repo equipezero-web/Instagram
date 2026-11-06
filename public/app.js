@@ -75,7 +75,7 @@ document.addEventListener("DOMContentLoaded",async()=>{
     const response=await fetch("/health",{credentials:"same-origin",cache:"no-store"});
     if(!response.ok)throw Error("health");
     const health=await response.json();
-    status.textContent=health.ok&&health.database?"Worker e D1 detectados":"Serviço requer atenção";
+    status.textContent=health.ok&&health.database?"Serviço operacional":"Serviço requer atenção";
   }catch{
     status.textContent="Não foi possível verificar o serviço";
     return;
@@ -99,10 +99,10 @@ document.addEventListener("DOMContentLoaded",async()=>{
         byId("event-count").textContent=String(data.webhook_events??0);
         const last=byId("last-event");
         if(last)last.textContent=data.last_event_at||"Nenhum evento";
-        notice.textContent=data.webhook_events>0
-          ?"O Worker recebeu notificações da Meta. As mensagens abaixo são extraídas somente de eventos reais; a conexão com a API ainda não foi validada por consulta."
-          :"Nenhum evento de webhook foi registrado no D1. Consulte os logs de POST /webhooks/instagram no Cloudflare; a verificação do token é independente da entrega das DMs.";
+        notice.hidden=Boolean(data.webhook_events>0);
+        notice.textContent=data.webhook_events>0?"":"Aguardando o primeiro evento de mensagem. Confira o diagnóstico em Configurações.";
       }catch(error){
+        notice.hidden=false;
         notice.textContent="Não foi possível consultar a integração: "+error.message;
       }
 
@@ -113,6 +113,7 @@ document.addEventListener("DOMContentLoaded",async()=>{
         const items=Array.isArray(data.items)?data.items:[];
         byId("messages-count").textContent=String(items.length)+" recente(s)";
         byId("ad-count").textContent=String(items.filter(item=>item.from_ad).length)+" identificados";
+        byId("interest-count").textContent="—";
         const list=byId("messages-list");
         list.replaceChildren();
         if(!items.length){
