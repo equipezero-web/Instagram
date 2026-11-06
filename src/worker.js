@@ -125,7 +125,8 @@ async function findAssignedInstagram(env){
   const checks=[{source:"debug_token",ok:debug.ok,
     code:debug.ok?(debug.is_valid?"valid":"invalid"):debug.code,
     ...(!debug.ok&&debug.message?{reason:debug.message}:{}),
-    ...(!debug.ok&&debug.error_type?{error_type:debug.error_type}:{})}];
+    ...(!debug.ok&&debug.error_type?{error_type:debug.error_type}:{}),
+    ...(debug.subcode?{subcode:debug.subcode}:{})}];
   if(debug.ok&&!debug.is_valid){
     return {ok:false,code:"token_invalid",token_valid:false,identity_verified:false,
       message:"A verificação oficial da Meta confirmou que META_ACCESS_TOKEN está inválido ou não está mais ativo. Substitua-o por um token válido emitido para o Sales Hub.",checks};
@@ -138,7 +139,8 @@ async function findAssignedInstagram(env){
   const identity=await graphRequest(env,"/me?fields=id");
   checks.push({source:"token_identity",ok:identity.ok,code:identity.ok?"ok":identity.code,
     ...(!identity.ok&&identity.message?{reason:identity.message}:{}),
-    ...(!identity.ok&&identity.error_type?{error_type:identity.error_type}:{})});
+    ...(!identity.ok&&identity.error_type?{error_type:identity.error_type}:{}),
+    ...(identity.subcode?{subcode:identity.subcode}:{})});
   // A consulta /me pode não estar autorizada para alguns tokens de sistema/Instagram.
   // Não encerrar o diagnóstico por erro de permissão: o acesso direto ao IG ID é
   // uma verificação independente e utiliza somente a permissão de Instagram.
@@ -181,7 +183,7 @@ async function findAssignedInstagram(env){
   const candidateId=String(env.META_INSTAGRAM_ASSET_ID||"972986455905159");
   const methods=[{name:"unified_login_assets",
     path:"/me/assigned_instagram_accounts?fields=id,username&limit=100"}];
-  if(scopes===null||scopes.includes("business_management")){
+  if(scopes?.includes("business_management")){
     methods.push(
       {name:"business_owned_instagram_accounts",
         path:"/"+encodeURIComponent(businessId)+"/owned_instagram_accounts?fields=id,username&limit=100"},
@@ -189,7 +191,8 @@ async function findAssignedInstagram(env){
         path:"/"+encodeURIComponent(businessId)+"/instagram_business_accounts?fields=id,username&limit=100"}
     );
   }else{
-    checks.push({source:"business_edges",ok:false,code:"business_management_not_granted"});
+    checks.push({source:"business_edges",ok:false,
+      code:scopes===null?"not_attempted_scopes_unknown":"business_management_not_granted"});
   }
   const candidateIds=new Set();
   for(const method of methods){
