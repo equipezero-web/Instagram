@@ -234,7 +234,7 @@ async function checkMetaIntegration(env){
     messages_subscribed:fields.includes("messages"),
     postbacks_subscribed:fields.includes("messaging_postbacks")};
 }
-export default {async fetch(req,env){const url=new URL(req.url);if(url.pathname==="/health")return json({ok:true,service:"instagram-sales-hub",database:!!env.DB});
+export default {async fetch(req,env){const url=new URL(req.url);if(url.pathname==="/health")return json({ok:true,service:"instagram-sales-hub",database:!!env.DB,release:"meta200-fallback-webhook-20261106"});
 if(url.pathname==="/webhooks/instagram"&&req.method==="GET"){if(!env.META_VERIFY_TOKEN)return json({error:"not_configured"},503);const p=url.searchParams;return p.get("hub.mode")==="subscribe"&&p.get("hub.verify_token")===env.META_VERIFY_TOKEN?new Response(p.get("hub.challenge")||""):json({error:"invalid_challenge"},403)}
 if(url.pathname==="/webhooks/instagram"&&req.method==="POST"){
   // Registros técnicos sem IP, token, assinatura ou conteúdo de mensagens.
