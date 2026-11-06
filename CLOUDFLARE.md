@@ -72,3 +72,14 @@ O Worker testa **primeiro** `GET /17841449038623629?fields=id,username` com `MET
 - A lista exibe até 50 mensagens contidas nos últimos 250 eventos; **não** é um histórico completo.
 - Implementar política de retenção/expurgo dos eventos brutos e controles de privacidade antes de uso continuado em produção.
 - Permissões avançadas e análise do app pela Meta podem ser exigidas para mensagens de contas não participantes do teste.
+
+## Diagnóstico quando as mensagens não chegam (eventos = 0)
+O Worker registra apenas etapa e código HTTP dos POSTs no canal `sales_hub_webhook`, sem registrar remetente, conteúdo, token ou assinatura. Logs de invocação são habilitados com `[observability]` em `wrangler.toml`. Depois do deploy:
+
+1. Em **Cloudflare → Workers & Pages → instagram-sales-hub → Observability → Logs/Live**, acompanhe as requisições do caminho `/webhooks/instagram`.
+2. Em **Meta Developers → API setup with Unified Login → Configurar webhooks**, se disponível, use **Test** junto ao evento `messages` e mande o evento para o servidor. Confira status do POST.
+3. `sales_hub_webhook` + `event_saved` (200): chegou e foi gravado no D1; atualize o painel. `signature_mismatch` / `invalid_signature_header` (401): conferir se `META_APP_SECRET` corresponde ao mesmo aplicativo que envia a requisição. `database_insert_failed` (500): conferir binding/migration do D1. `runtime_secret_or_database_missing` (503): falta segredo ou banco na versão de produção. **Ausência de POST** nos logs: analisar configurações de entrega da Meta e a exceção de Cloudflare Access para o webhook.
+4. Para DMs **reais**, conferir no Instagram profissional **Mensagens e respostas aos stories → Controles/solicitações de mensagens → Ferramentas conectadas → Permitir acesso às mensagens**, que deve estar ativo. Reenviar uma mensagem nova depois de habilitar.
+5. Se o aplicativo ainda estiver em desenvolvimento, use conta remetente devidamente habilitada como testadora. A entrega de DMs de contas comuns pode depender de revisão da Meta / modo Live.
+6. Não compartilhe URLs de verificação completas, tokens, conteúdo de DMs nem logs com identificadores pessoais.
+
