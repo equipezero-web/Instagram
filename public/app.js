@@ -20,7 +20,8 @@ document.addEventListener("DOMContentLoaded",async()=>{
           const result=check.ok
             ?(typeof check.count==="number"?check.count+" ativo(s)":check.code==="ok"||check.code==="valid"?"confirmado":String(check.code||"confirmado"))
             :"erro "+String(check.code)+(check.subcode?" / subcódigo "+check.subcode:"");
-          return check.source+": "+result;
+          const reason=!check.ok&&check.reason?" — "+String(check.reason):"";
+          return check.source+": "+result+reason;
         }).join(" | "):"";
         const scopes=data.permissions_status?" Permissões: "+data.permissions_status+".":"";
         detail.textContent=(data.token_valid===true?"Token validado pela Meta. ":data.token_valid===false?"Token inválido. ":data.identity_verified?"Identidade respondida pela Meta; validade não confirmada. ":"Atenção: ")+(data.message||"A conta ainda não foi confirmada.")+scopes+(diagnostic?" Consultas: "+diagnostic:"");
