@@ -127,6 +127,22 @@ async function findAssignedInstagram(env){
     code:clientBusiness.ok?(clientBusiness.data?.client_business_id?"found":"not_returned"):clientBusiness.code,
     ...(clientBusiness.subcode?{subcode:clientBusiness.subcode}:{})});
   const scopes=debug.ok?debug.scopes:null;
+  // ID identificado na tela API setup with Unified Login (Meta Developers).
+  // É diferente do ID de ativo apresentado no Business Suite.
+  const igId=String(env.META_INSTAGRAM_USER_ID||"17841449038623629");
+  const direct=await graphRequest(env,"/"+encodeURIComponent(igId)+"?fields=id,username");
+  const expectedUsername="advisory.ofc";
+  const directMatched=direct.ok&&
+    String(direct.data?.username||"").replace(/^@/,"").toLowerCase()===expectedUsername;
+  checks.push({source:"meta_setup_ig_user_id",ok:direct.ok,
+    code:direct.ok?(directMatched?"matched":"different_username"):direct.code,
+    ...(direct.subcode?{subcode:direct.subcode}:{})});
+  if(directMatched){
+    return {ok:true,account_id:String(direct.data.id||igId),username:expectedUsername,
+      identity_verified:true,token_valid:debug.ok?debug.is_valid:null,
+      token_type:debug.ok?debug.type:null,discovery_source:"meta_setup_ig_user_id",
+      permissions:scopes,checks};
+  }
   const required=["instagram_basic","instagram_manage_messages"];
   const missing=scopes===null?[]:required.filter(x=>!scopes.includes(x));
   const businessId=String(env.META_BUSINESS_ID||"2184116235477697");
@@ -191,7 +207,7 @@ async function findAssignedInstagram(env){
     missing_permissions:missing,
     message:missing.length?
       "A Meta validou o token, mas estão ausentes estas permissões: "+missing.join(", ")+".":
-      "O token e as permissões do Direct estão válidos, mas a Meta não retornou @advisory.ofc na lista de contas. Testamos também o ID do ativo informado pelo Business Suite. O resultado da consulta direta aparece abaixo; o ID do ativo pode ser diferente do ID de usuário do Instagram Graph API.",
+      "O token está válido, mas não conseguimos confirmar a conta @advisory.ofc. Testamos primeiro o ID de usuário exibido na própria configuração Meta Developers; confira o código em meta_setup_ig_user_id para saber por que a consulta não foi reconhecida.",
     checks};
 }
 function subscribedFields(data){
