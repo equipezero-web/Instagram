@@ -12,6 +12,13 @@ META_BUSINESS_ID = "2184116235477697"
 META_INSTAGRAM_ASSET_ID = "972986455905159"
 META_INSTAGRAM_USER_ID = "17841449038623629"
 
+[observability]
+enabled = true
+
+[observability.logs]
+invocation_logs = true
+head_sampling_rate = 1
+
 [[d1_databases]]
 binding = "DB"
 database_name = "instagram-sales-hub-db"
